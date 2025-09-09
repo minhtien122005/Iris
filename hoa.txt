@@ -1,0 +1,107 @@
+!pip install gradio
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.utils import to_categorical
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+import gradio as gr
+import os
+
+def train_model():
+    print("Bắt đầu tải và xử lý dữ liệu...")
+    iris = load_iris()
+    X = iris.data
+    y = iris.target
+    class_names = iris.target_names
+    y_one_hot = to_categorical(y)
+    X_train, _, y_train, _ = train_test_split(X, y_one_hot, test_size=0.2, random_state=42)
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    
+    print("Bắt đầu xây dựng và huấn luyện mô hình...")
+    model = Sequential([
+        Dense(16, input_shape=(4,), activation='relu'),
+        Dense(8, activation='relu'),
+        Dense(3, activation='softmax')
+    ])
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    model.fit(X_train_scaled, y_train, epochs=100, batch_size=10, verbose=0)
+    
+    print("Huấn luyện mô hình hoàn tất.")
+    return model, scaler, class_names
+
+model, scaler, class_names = train_model()
+
+image_map = {
+    "setosa": "S1.jpg",
+    "versicolor": "Ve1.webp",
+    "virginica": "Vi1.jpg"
+}
+
+def predict_from_inputs(s_len, s_wid, p_len, p_wid):
+    input_data = np.array([[s_len, s_wid, p_len, p_wid]])
+    input_scaled = scaler.transform(input_data)
+    prediction = model.predict(input_scaled)
+    
+    confidences = {class_names[i]: float(prediction[0][i]) for i in range(3)}
+    
+    predicted_class_name = class_names[np.argmax(prediction)]
+    image_path = image_map.get(predicted_class_name)
+    
+    return confidences, image_path
+
+def predict_from_image(image_input):
+    print("Lưu ý: Chức năng dự đoán từ ảnh thật cần một mô hình CNN.")
+    predicted_class_name = np.random.choice(class_names)
+    confidences = {name: (1.0 if name == predicted_class_name else 0.0) for name in class_names}
+    image_path = image_map.get(predicted_class_name)
+    return confidences, image_path
+
+with gr.Blocks(theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# Dự đoán loài hoa IRIS")
+    gr.Markdown("Sử dụng Mạng Nơ-ron Nhân tạo (ANN) để dự đoán 3 loài hoa: Setosa, Versicolor, và Virginica.")
+    
+    with gr.Tabs():
+        with gr.TabItem("Dự đoán từ Số liệu"):
+            with gr.Row():
+                with gr.Column(scale=1):
+                    sepal_length = gr.Slider(4.0, 8.0, label="Chiều dài đài hoa (cm)")
+                    sepal_width = gr.Slider(2.0, 4.5, label="Chiều rộng đài hoa (cm)")
+                    petal_length = gr.Slider(1.0, 7.0, label="Chiều dài cánh hoa (cm)")
+                    petal_width = gr.Slider(0.1, 2.5, label="Chiều rộng cánh hoa (cm)")
+                    predict_btn_num = gr.Button("Dự đoán", variant="primary")
+                
+                with gr.Column(scale=2):
+                    output_label_num = gr.Label(num_top_classes=3, label="Xác suất")
+                    output_image_num = gr.Image(label="Ảnh minh họa")
+
+        with gr.TabItem("Dự đoán từ Hình ảnh"):
+            gr.Markdown("Lưu ý: Chức năng này hiện đang **giả lập** kết quả.")
+            with gr.Row():
+                with gr.Column(scale=1):
+                    input_image = gr.Image(type="pil", label="Chọn ảnh hoa")
+                    predict_btn_img = gr.Button("Dự đoán", variant="primary")
+
+                with gr.Column(scale=2):
+                    output_label_img = gr.Label(num_top_classes=3, label="Xác suất")
+                    output_image_img = gr.Image(label="Ảnh minh họa")
+
+    predict_btn_num.click(
+        fn=predict_from_inputs,
+        inputs=[sepal_length, sepal_width, petal_length, petal_width],
+        outputs=[output_label_num, output_image_num]
+    )
+    
+    predict_btn_img.click(
+        fn=predict_from_image,
+        inputs=input_image,
+        outputs=[output_label_img, output_image_img]
+    )
+    
+  
+    gr.Markdown("--- \n Make by: Nguyễn Minh Tiến, 31231020122, Robot&Ai K49")
+
+demo.launch(debug=True)
